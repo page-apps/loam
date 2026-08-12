@@ -1,7 +1,7 @@
 {
   "name": "loam-logseq-pwa",
   "version": "0.0.0",
-  "description": "A local-first PWA for reading, editing, and connecting Logseq pages",
+  "description": "A mobile-first PWA for editing a local-folder or private-GitHub Logseq graph",
   "packageManager": "pnpm@10.15.1",
   "engines": {
     "node": ">=20.19",
@@ -35,6 +35,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cmwen/logseq-pwa.git"
+    "url": "git+https://github.com/page-apps/loam.git"
   }
 }

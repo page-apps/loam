@@ -59,6 +59,7 @@ export function OutlinerEditor({
   const [activeId, setActiveId] = useState<string | undefined>(initialBlocks[0]?.id);
   const [menuId, setMenuId] = useState<string>();
   const [focusRequest, setFocusRequest] = useState<FocusRequest>();
+  const outlinerRoot = useRef<HTMLElement>(null);
   const inputs = useRef(new Map<string, HTMLTextAreaElement>());
   const past = useRef<OutlinerBlock[][]>([]);
   const future = useRef<OutlinerBlock[][]>([]);
@@ -93,6 +94,22 @@ export function OutlinerEditor({
   useEffect(() => {
     for (const input of inputs.current.values()) resizeInput(input);
   });
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const updateKeyboardOffset = () => {
+      const offset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      outlinerRoot.current?.style.setProperty('--outliner-keyboard-offset', `${offset}px`);
+    };
+    updateKeyboardOffset();
+    viewport.addEventListener('resize', updateKeyboardOffset);
+    viewport.addEventListener('scroll', updateKeyboardOffset);
+    return () => {
+      viewport.removeEventListener('resize', updateKeyboardOffset);
+      viewport.removeEventListener('scroll', updateKeyboardOffset);
+    };
+  }, []);
 
   const commit = (next: OutlinerBlock[], focus?: FocusRequest, record = true) => {
     if (record) {
@@ -232,6 +249,7 @@ export function OutlinerEditor({
     <section
       aria-label={ariaLabel}
       className={`outliner ${readOnly ? 'outliner-readonly' : ''} ${className}`.trim()}
+      ref={outlinerRoot}
     >
       <div className='outliner-tree'>
         <BlockTree
@@ -330,7 +348,9 @@ function BlockTree({
               </button>
               <textarea
                 aria-label='Block content'
+                autoCapitalize='sentences'
                 className='outliner-input'
+                enterkeyhint='enter'
                 onFocus={() => onActivate(block.id)}
                 onInput={(event) => {
                   resizeInput(event.currentTarget);

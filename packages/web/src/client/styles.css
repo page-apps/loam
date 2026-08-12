@@ -31,7 +31,7 @@ button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(214, 95, 66, 0.28); outline-offset: 2px; }
 
 .app-shell { min-height: 100vh; }
-.topbar { align-items: center; background: var(--paper); border-bottom: 1px solid var(--line); display: flex; height: 76px; justify-content: space-between; padding: 0 34px; }
+.topbar { align-items: center; background: var(--paper); border-bottom: 1px solid var(--line); display: flex; height: 76px; justify-content: space-between; padding: 0 34px; position: sticky; top: 0; z-index: 20; }
 .brand-lockup, .topbar-actions, .connection-status, .button, .breadcrumbs, .page-actions, .page-stats, .relation-heading, .folder-tip, .quick-create, .toast { align-items: center; display: flex; }
 .brand-lockup { gap: 11px; }
 .brand-mark { align-items: center; background: var(--accent); border-radius: 9px 9px 9px 3px; display: flex; height: 31px; justify-content: center; transform: rotate(-8deg); width: 31px; }
@@ -39,7 +39,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
 .brand-mark span::after { background: #fff4eb; border-radius: 50%; content: ''; height: 3px; left: 5px; position: absolute; top: 3px; width: 3px; }
 .brand-name { font-family: Fraunces, Georgia, serif; font-size: 25px; font-weight: 600; letter-spacing: -0.04em; line-height: 20px; margin: 0; }
 .brand-tagline { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: .09em; margin: 4px 0 0; text-transform: uppercase; }
-.topbar-actions { gap: 18px; }
+.topbar-actions { gap: 8px; }
 .connection-status { color: var(--muted-dark); font-family: 'DM Mono', monospace; font-size: 10px; gap: 8px; letter-spacing: .03em; text-transform: uppercase; }
 .status-dot { background: var(--green); border-radius: 50%; box-shadow: 0 0 0 3px rgba(114, 145, 124, .13); height: 7px; width: 7px; }
 .status-demo .status-dot { background: #c3a56d; box-shadow: 0 0 0 3px rgba(195, 165, 109, .15); }
@@ -50,6 +50,29 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
 .button-quiet:hover { background: #f1f1eb; color: var(--ink); }
 .button-primary { background: var(--accent); box-shadow: 0 5px 15px rgba(214, 95, 66, .18); color: white; font-weight: 600; }
 .button-primary:hover { background: var(--accent-deep); }
+.button-danger { border: 1px solid #e2b8ad; color: #a34432; }
+.button-danger:hover { background: #fae8e2; }
+
+.dialog-backdrop { align-items: center; background: rgba(39, 42, 36, .52); display: flex; inset: 0; justify-content: center; padding: 22px; position: fixed; z-index: 50; }
+.connection-dialog { background: var(--paper); border: 1px solid #e4e2d8; border-radius: 15px; box-shadow: 0 24px 80px rgba(35, 38, 31, .28); max-height: calc(100dvh - 44px); max-width: 620px; overflow-y: auto; padding: 28px; width: 100%; }
+.dialog-heading { align-items: flex-start; display: flex; gap: 20px; justify-content: space-between; }
+.dialog-heading h2 { font-family: Fraunces, Georgia, serif; font-size: 31px; font-weight: 500; letter-spacing: -.035em; line-height: 1.08; margin: 7px 0 0; }
+.dialog-heading > button { align-items: center; background: #efefe9; border: 0; border-radius: 50%; color: var(--muted-dark); cursor: pointer; display: flex; flex: 0 0 auto; height: 38px; justify-content: center; width: 38px; }
+.dialog-lede { color: #70766d; font-size: 13px; line-height: 1.6; margin: 15px 0 20px; }
+.connection-form { display: flex; flex-direction: column; gap: 14px; }
+.connection-form label:not(.checkbox-field) { color: #686e65; display: flex; flex-direction: column; font-family: 'DM Mono', monospace; font-size: 9px; gap: 7px; letter-spacing: .06em; text-transform: uppercase; }
+.connection-form input:not([type='checkbox']) { background: #f4f4ee; border: 1px solid #dcddd4; border-radius: 7px; color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 13px; height: 42px; min-width: 0; outline: 0; padding: 0 11px; text-transform: none; }
+.connection-form input:not([type='checkbox']):focus { background: white; border-color: #cda193; box-shadow: 0 0 0 3px rgba(214, 95, 66, .11); }
+.repository-fields { display: grid; gap: 10px; grid-template-columns: 1fr 1.2fr .75fr; }
+.repository-fields label { min-width: 0; }
+.permission-callout { background: #eef3ed; border: 1px solid #dce5db; border-radius: 8px; color: #647469; display: flex; flex-direction: column; font-size: 10px; gap: 4px; line-height: 1.45; padding: 11px 12px; }
+.permission-callout strong { color: #456050; font-size: 11px; }
+.security-disclosure { background: #f7eee8; border-left: 3px solid #d49a7f; color: #79685d; font-size: 10px; line-height: 1.55; margin: 0; padding: 10px 11px; }
+.checkbox-field { align-items: flex-start; color: #666c63; display: flex; font-size: 11px; gap: 9px; line-height: 1.45; }
+.checkbox-field input { accent-color: var(--accent); flex: 0 0 auto; height: 16px; margin: 0; width: 16px; }
+.acknowledgement-field { background: #f3f3ed; border-radius: 7px; padding: 9px; }
+.connection-error { color: #aa3e2b; font-size: 11px; margin: 0; }
+.dialog-actions { align-items: center; display: flex; gap: 9px; justify-content: flex-end; margin-top: 3px; }
 
 .app-layout { display: grid; grid-template-columns: 260px minmax(480px, 1fr) 278px; min-height: calc(100vh - 76px); }
 .sidebar { background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 28px 16px 17px; }
@@ -184,8 +207,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
 }
 
 @media (max-width: 720px) {
-  .topbar { height: 64px; padding: 0 17px; }
+  .topbar { height: calc(60px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 12px 0; }
   .brand-tagline, .connection-status { display: none; }
+  .brand-mark { height: 28px; width: 28px; }
+  .brand-name { font-size: 23px; }
+  .topbar-storage-button { height: 42px; min-width: 42px; padding: 0; }
+  .topbar-storage-button span { display: none; }
   .app-layout { display: block; min-height: calc(100vh - 64px); }
   .sidebar { border-bottom: 1px solid var(--line); border-right: 0; padding: 15px 12px 13px; }
   .sidebar-intro { padding: 0 5px 13px; }
@@ -196,14 +223,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
   .page-nav-item { flex: 0 0 auto; max-width: 170px; min-height: 32px; padding: 0 9px; width: auto; }
   .sidebar > .sidebar-section-heading, .sidebar-bottom { display: none; }
   .block-results { display: none; }
-  .content-area { padding: 18px 13px 67px; }
-  .page-toolbar { padding: 0 5px; }
+  .content-area { padding: 0 13px calc(67px + env(safe-area-inset-bottom, 0px)); }
+  .page-toolbar { background: rgba(247, 247, 242, .95); margin: 0 -3px; padding: 10px 8px 8px; position: sticky; top: calc(60px + env(safe-area-inset-top, 0px)); z-index: 12; }
   .breadcrumbs span:last-child { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .page-card { margin-top: 14px; min-height: 500px; padding: 28px 22px 42px; }
+  .page-card { border-radius: 10px; margin-top: 4px; min-height: 500px; padding: 26px 18px 42px; }
   .page-outliner { margin-top: 20px; min-height: 330px; }
   .page-heading { display: block; }
   .page-heading h1 { font-size: 34px; }
   .page-stats { padding-top: 15px; }
   .privacy-line { line-height: 1.5; }
-  .quick-create { bottom: 12px; left: 12px; width: calc(100vw - 24px); }
+  .quick-create { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 12px; width: calc(100vw - 24px); }
+  .toast { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); right: 12px; }
+  .dialog-backdrop { align-items: flex-end; padding: 0; }
+  .connection-dialog { border-bottom: 0; border-radius: 18px 18px 0 0; max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 18px); padding: 23px 18px calc(18px + env(safe-area-inset-bottom, 0px)); }
+  .dialog-heading h2 { font-size: 28px; }
+  .repository-fields { grid-template-columns: 1fr 1fr; }
+  .repository-fields label:last-child { grid-column: 1 / -1; }
+  .connection-form input:not([type='checkbox']) { font-size: 16px; }
+  .dialog-actions { align-items: stretch; flex-direction: column-reverse; }
+  .dialog-actions .button { width: 100%; }
 }

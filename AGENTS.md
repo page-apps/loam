@@ -2,6 +2,17 @@
 
 This document provides guidelines for AI agents working with this codebase.
 
+## Product and security boundary
+
+Loam is a public, static, mobile-first PWA whose Markdown graph is provided by a `GraphStore`. Preserve both supported stores:
+
+- a user-selected local folder through the File System Access API;
+- one private GitHub repository connected at runtime with a fine-grained PAT.
+
+UI code must consume the graph-store capability and must not read a raw token or call GitHub directly. Keep session-only credentials as the default. Persistent credentials require the standard disclosure and explicit acknowledgement. Never put a PAT or private note content in source, URLs, logs, build output, telemetry, Actions configuration, or service-worker caches. GitHub writes must include the expected file revision and surface conflicts instead of silently overwriting.
+
+The outliner, data integrity, daily capture, and mobile editing experience have priority over visual polish. See `docs/PRD.md` and `docs/ADR-002-private-github-graph.md` before changing persistence or credential behavior.
+
 ## Project Structure
 
 This is a TypeScript monorepo using pnpm workspaces with the following packages:

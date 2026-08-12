@@ -141,7 +141,7 @@
     background: rgba(255, 254, 250, .94);
     border: 1px solid var(--outliner-line);
     border-radius: 10px;
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--outliner-keyboard-offset, 0px));
     box-shadow: 0 8px 28px rgba(45, 48, 43, .16);
     display: flex;
     gap: 2px;
@@ -150,6 +150,7 @@
     padding: 5px;
     position: fixed;
     right: 10px;
+    transition: bottom .18s ease;
     z-index: 10;
   }
   .outliner-mobile-toolbar button { height: 42px; min-width: 42px; }

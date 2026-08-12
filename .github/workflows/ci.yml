@@ -44,3 +44,9 @@ jobs:
     
     - name: Run tests
       run: pnpm test
+
+    - name: Install Chromium
+      run: pnpm --filter @loam/web exec playwright install --with-deps chromium
+
+    - name: Run mobile PWA journeys
+      run: pnpm --filter @loam/web test:e2e

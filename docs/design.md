@@ -1,56 +1,76 @@
-# Loam Design Notes
+# Loam design notes
 
 ## Overview
 
-Loam is a local-first, journal-first PWA for editing a Markdown workspace as a structured block outliner. The first MVP opens today's journal, supports independent nested block editing, searches at block granularity, follows references, shows contextual backlinks, and saves portable Markdown back to the same folder.
+Loam is a mobile-first, journal-first PWA for editing a Markdown workspace as a structured block outliner. It opens today’s journal, supports independent nested block editing, searches at block granularity, follows references, shows contextual backlinks, and saves portable Markdown through one of two graph stores.
 
 ## Architecture
 
 ```text
-Browser
-  ├─ File System Access API ──> selected Logseq folder
-  ├─ Core block model ────────> hierarchy, editing operations, metadata
-  ├─ Core parser/indexer ─────> page titles, outgoing links, backlinks
-  └─ Preact UI ───────────────> journal, outliner, block search, page map
-                                    │
-                                    └─ static Vite build ──> GitHub Pages
+                                  ┌─ File System Access API ──> local graph folder
+Preact UI ──> GraphStore ─────────┤
+     │                            └─ GitHub REST API ─────────> private graph repository
+     │                                      │
+     │                                      └─ revision-keyed IndexedDB blob cache
+     ├─ Core block model ────────> hierarchy, editing operations, metadata
+     ├─ Core parser/indexer ─────> titles, links, backlinks, block search
+     └─ static Vite shell ───────> public GitHub Pages deployment
 ```
 
-The app is client-only when deployed. No graph content is sent to a Loam server. The existing Express, CLI, and MCP packages remain as extension points from the base monorepo, but are not required by the Pages build.
+The deployed app is client-only. Local-folder content is not uploaded. GitHub-mode content is sent only to the selected private repository through `api.github.com`; no graph content or token enters the public Pages build.
 
 ### Core package
 
-`packages/core/src/logseq.ts` and `packages/core/src/blocks.ts` contain framework-agnostic helpers for:
+`packages/core/src/logseq.ts` and `packages/core/src/blocks.ts` provide framework-agnostic helpers for:
 
 - normalizing Logseq page names and filenames;
-- extracting `[[Page]]` and `[[Page|alias]]` references;
-- building outgoing-link and backlink relationships.
+- extracting page references, aliases, tags, and properties;
+- building outgoing-link and backlink relationships;
 - parsing and serializing portable nested block Markdown;
-- immutable split, merge, indent, outdent, move, collapse, and safe-delete operations;
-- extracting block properties, references, and tags.
-
-The core package has no browser or filesystem dependency, so the indexing behavior can be tested independently.
+- immutable split, merge, indent, outdent, move, collapse, and safe-delete operations.
 
 ### Web package
 
-`packages/web/src/client/logseq.ts` adapts the browser File System Access API. It recursively reads `.md` files, retains each file handle for writes, creates journal and page files, and detects external changes before overwriting. `OutlinerEditor.tsx` owns keyboard, touch, focus, and undo behavior over the canonical core block model. `App.tsx` coordinates the workspace, journal, autosave, block search, references, and backlinks.
+- `logseq.ts` defines the `GraphStore` boundary and adapts writable browser folders.
+- `github-graph.ts` encapsulates runtime PAT credentials, Git tree/blob reads, revision-aware file writes, connection storage, token redaction, and the private blob cache.
+- `OutlinerEditor.tsx` owns keyboard, touch, visual-viewport, focus, and undo behavior.
+- `App.tsx` coordinates connection, journals, autosave, page creation, quick capture, search, references, and backlinks without reading a raw GitHub token.
 
-### Local file behavior
+### Local-folder data flow
 
 1. The user selects a graph root with `showDirectoryPicker({ mode: 'readwrite' })`.
-2. Loam reads markdown files in that folder and its child directories.
-3. The core indexer maps page titles to links and backlinks.
-4. Saving calls `FileSystemFileHandle.createWritable()` for the selected page.
-5. Refreshing repeats the read/index pass so edits made in Logseq or another editor appear.
+2. Loam reads Markdown recursively and retains file handles for writes.
+3. The core indexer derives pages, links, backlinks, tags, and blocks.
+4. Saving checks current file content before creating a writable stream.
+5. Refreshing repeats the read/index pass so external edits appear.
 
-The demo graph is in-memory and read-only. It exists so the UI and link interactions can be evaluated before a folder is granted.
+### Private-GitHub data flow
+
+1. The user enters a repository target and a fine-grained PAT at runtime.
+2. The store verifies write access without exposing the token to UI code.
+3. A recursive Git tree identifies Markdown blobs.
+4. Unchanged blobs are read from IndexedDB by Git SHA; missing blobs come from GitHub.
+5. The core package rebuilds the derived page index.
+6. Saving uses the Repository Contents API and includes the expected blob SHA.
+7. A GitHub conflict preserves the local draft and requires a refresh instead of overwriting.
+
+The service worker ignores cross-origin requests, so authenticated GitHub responses never enter the public shell cache.
+
+## Mobile interaction
+
+- Top-level storage actions collapse to touch-sized icons.
+- Page actions stay visible beneath the safe-area-aware sticky app bar.
+- Block inputs use mobile-readable sizing and natural sentence input.
+- The outliner command bar tracks `visualViewport`, staying above the software keyboard.
+- Quick capture and notifications account for the bottom safe area.
+- The GitHub connection form becomes a bottom sheet on narrow viewports.
 
 ## Scope boundaries
 
-Included: page reading, lightweight Logseq rendering, page search, page links, backlinks, editing, saving, page creation, and PWA shell caching.
+Included: journals, block editing, search, links, backlinks, local folder access, private GitHub access, revision conflicts, page creation, local draft recovery, private revision cache, and PWA shell caching.
 
-Not included: Datalog queries, charts, graph visualization, sync, authentication, cloud storage, or server-side parsing.
+Not included: real-time collaboration, CRDT merge, offline GitHub mutation replay, Datalog queries, charts, graph visualization, hosted authentication, or a Loam synchronization server.
 
 ## Deployment
 
-Vite builds `packages/web/src/client` to `packages/web/dist/client` with a relative base path so the artifact works at a GitHub Pages project URL. `.github/workflows/deploy-pages.yml` uploads that directory using the official Pages artifact and deploy actions.
+Vite builds `packages/web/src/client` to `packages/web/dist/client` with a relative base path. GitHub Pages deploys this token-free directory. Runtime private-repository access needs no Actions secret.

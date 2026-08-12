@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Private GitHub graph storage with session-first fine-grained PAT credentials.
+- Revision-aware GitHub writes, private IndexedDB graph caching, offline reading, and cache clearing.
+- A shared graph-store boundary for local-folder and private-repository workflows.
+- Mobile safe-area handling, software-keyboard-aware outliner controls, and installable PNG icons.
+- Security architecture and private graph setup documentation.
 - Initial template structure
 - Monorepo setup with pnpm workspaces
 - Core package with business logic

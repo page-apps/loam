@@ -30,7 +30,7 @@ The devcontainer includes:
 
 ```bash
 # Clone the repository
-git clone https://github.com/cmwen/logseq-pwa.git
+git clone https://github.com/page-apps/loam.git
 cd logseq-pwa
 
 # Enable corepack and activate pnpm

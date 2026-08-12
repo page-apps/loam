@@ -1,16 +1,20 @@
 import { buildPageIndex, normalizePageTitle, type PageInput, parseBlockMarkdown } from '@loam/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
-  appendJournalCapture,
-  createPageFile,
-  ensureJournalFile,
+  clearGitHubGraphCache,
+  forgetGitHubConnection,
+  type GitHubGraphConfig,
+  GitHubGraphStore,
+  loadSavedGitHubConnection,
+  saveGitHubConnection,
+} from './github-graph.js';
+import {
   findJournalByDate,
+  type GraphStore,
   journalPathForDate,
   journalTitleForDate,
   type LocalPage,
-  pickLogseqFolder,
-  readLogseqFolder,
-  savePage,
+  pickLocalFolderStore,
   supportsFolderAccess,
 } from './logseq.js';
 import { OutlinerEditor } from './OutlinerEditor.js';
@@ -70,6 +74,7 @@ type IconName =
   | 'check'
   | 'chevron'
   | 'close'
+  | 'cloud'
   | 'edit'
   | 'folder'
   | 'link'
@@ -122,6 +127,13 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
           <path d='m6 6 12 12M18 6 6 18' />
         </svg>
       );
+    case 'cloud':
+      return (
+        <svg aria-hidden='true' {...common}>
+          <path d='M7 18h10.5a4.5 4.5 0 0 0 .7-8.95A6.7 6.7 0 0 0 5.4 9.9 4.1 4.1 0 0 0 7 18Z' />
+          <path d='m9 13 3-3 3 3M12 10v7' />
+        </svg>
+      );
     case 'edit':
       return (
         <svg aria-hidden='true' {...common}>
@@ -169,12 +181,11 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 }
 
 function reindexPages(pages: LocalPage[]): LocalPage[] {
-  const handles = new Map(pages.map((page) => [page.path, page.handle]));
+  const storageMetadata = new Map(
+    pages.map((page) => [page.path, { handle: page.handle, revision: page.revision }])
+  );
   return buildPageIndex(pages.map(({ title, path, content }) => ({ title, path, content }))).map(
-    (page) => ({
-      ...page,
-      handle: handles.get(page.path),
-    })
+    (page) => ({ ...page, ...storageMetadata.get(page.path) })
   );
 }
 
@@ -345,13 +356,167 @@ function EmptyState({ onOpen, supported }: { onOpen: () => void; supported: bool
   );
 }
 
+interface GitHubConnectionDialogProps {
+  open: boolean;
+  config: GitHubGraphConfig;
+  token: string;
+  persistent: boolean;
+  acknowledged: boolean;
+  busy: boolean;
+  error: string;
+  connected: boolean;
+  onClose: () => void;
+  onConfig: (config: GitHubGraphConfig) => void;
+  onToken: (token: string) => void;
+  onPersistent: (persistent: boolean) => void;
+  onAcknowledged: (acknowledged: boolean) => void;
+  onConnect: (event: Event) => void;
+  onDisconnect: () => void;
+}
+
+function GitHubConnectionDialog({
+  open,
+  config,
+  token,
+  persistent,
+  acknowledged,
+  busy,
+  error,
+  connected,
+  onClose,
+  onConfig,
+  onToken,
+  onPersistent,
+  onAcknowledged,
+  onConnect,
+  onDisconnect,
+}: GitHubConnectionDialogProps) {
+  if (!open) return null;
+
+  return (
+    <div className='dialog-backdrop' role='presentation'>
+      <section
+        aria-labelledby='github-dialog-title'
+        aria-modal='true'
+        className='connection-dialog'
+        role='dialog'
+      >
+        <div className='dialog-heading'>
+          <div>
+            <p className='eyebrow'>PRIVATE GRAPH</p>
+            <h2 id='github-dialog-title'>Connect a GitHub repository</h2>
+          </div>
+          <button aria-label='Close connection dialog' onClick={onClose} type='button'>
+            <Icon name='close' size={18} />
+          </button>
+        </div>
+        <p className='dialog-lede'>
+          Loam reads and commits Markdown through GitHub’s API. This makes the same graph available
+          on mobile without copying it into the public PWA deployment.
+        </p>
+        <form className='connection-form' onSubmit={onConnect}>
+          <div className='repository-fields'>
+            <label>
+              Owner
+              <input
+                autoCapitalize='none'
+                onInput={(event) => onConfig({ ...config, owner: event.currentTarget.value })}
+                placeholder='cmwen'
+                required
+                value={config.owner}
+              />
+            </label>
+            <label>
+              Repository
+              <input
+                autoCapitalize='none'
+                onInput={(event) => onConfig({ ...config, repository: event.currentTarget.value })}
+                placeholder='my-private-graph'
+                required
+                value={config.repository}
+              />
+            </label>
+            <label>
+              Branch
+              <input
+                autoCapitalize='none'
+                onInput={(event) => onConfig({ ...config, branch: event.currentTarget.value })}
+                required
+                value={config.branch}
+              />
+            </label>
+          </div>
+          <label>
+            Fine-grained personal access token
+            <input
+              autoCapitalize='none'
+              autoComplete='off'
+              onInput={(event) => onToken(event.currentTarget.value)}
+              placeholder='github_pat_…'
+              required
+              spellcheck={false}
+              type='password'
+              value={token}
+            />
+          </label>
+          <div className='permission-callout'>
+            <strong>Minimum GitHub permission</strong>
+            <span>Repository access: only {config.repository || 'your graph repository'}</span>
+            <span>Repository permission: Contents — read and write</span>
+          </div>
+          <p className='security-disclosure'>
+            This personal PWA uses a GitHub token in your browser. A security flaw in this app, a
+            dependency, a browser extension, or another app on the same origin may expose the token
+            and locally cached private notes. Use a fine-grained, expiring token limited to this
+            repository. Session-only storage is recommended.
+          </p>
+          <label className='checkbox-field'>
+            <input
+              checked={persistent}
+              onChange={(event) => {
+                onPersistent(event.currentTarget.checked);
+                if (!event.currentTarget.checked) onAcknowledged(false);
+              }}
+              type='checkbox'
+            />
+            <span>Keep the token on this trusted device instead of this browser session only.</span>
+          </label>
+          {persistent && (
+            <label className='checkbox-field acknowledgement-field'>
+              <input
+                checked={acknowledged}
+                onChange={(event) => onAcknowledged(event.currentTarget.checked)}
+                required
+                type='checkbox'
+              />
+              <span>I understand the token and private-note cache remain in this browser.</span>
+            </label>
+          )}
+          {error && <p className='connection-error'>{error}</p>}
+          <div className='dialog-actions'>
+            {connected && (
+              <button className='button button-danger' onClick={onDisconnect} type='button'>
+                Disconnect and clear cache
+              </button>
+            )}
+            <button className='button button-primary' disabled={busy} type='submit'>
+              <Icon name='cloud' size={17} />
+              {busy ? 'Connecting…' : connected ? 'Reconnect' : 'Connect private graph'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: The app shell intentionally keeps the local graph workflow in one place.
 export function App() {
-  const [root, setRoot] = useState<FileSystemDirectoryHandle>();
+  const savedGitHub = useMemo(() => loadSavedGitHubConnection(), []);
+  const [store, setStore] = useState<GraphStore>();
   const [pages, setPages] = useState<LocalPage[]>(demoIndex);
   const [selectedTitle, setSelectedTitle] = useState(todayTitle);
   const [search, setSearch] = useState('');
-  const [isDemo, setIsDemo] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [editorBlocks, setEditorBlocks] = useState<OutlinerBlock[]>([]);
@@ -360,7 +525,18 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [newPageTitle, setNewPageTitle] = useState('');
   const [captureText, setCaptureText] = useState('');
+  const [githubDialogOpen, setGitHubDialogOpen] = useState(false);
+  const [githubConfig, setGitHubConfig] = useState<GitHubGraphConfig>(
+    savedGitHub?.config ?? { owner: '', repository: '', branch: 'main' }
+  );
+  const [githubToken, setGitHubToken] = useState(savedGitHub?.token ?? '');
+  const [githubCredentialStored, setGitHubCredentialStored] = useState(Boolean(savedGitHub?.token));
+  const [persistentToken, setPersistentToken] = useState(savedGitHub?.persistent ?? false);
+  const [persistenceAcknowledged, setPersistenceAcknowledged] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
   const searchInput = useRef<HTMLInputElement>(null);
+
+  const isDemo = !store;
 
   const selectedPage = pages.find((page) => page.title === selectedTitle) ?? pages[0];
   const filteredPages = useMemo(() => {
@@ -398,6 +574,53 @@ export function App() {
     window.setTimeout(() => setNotice(''), 4200);
   }, []);
 
+  const activateStore = useCallback(
+    async (nextStore: GraphStore, message: string) => {
+      let loadedPages = await nextStore.loadPages();
+      if (!findJournalByDate(loadedPages)) {
+        await nextStore.ensureJournal();
+        loadedPages = await nextStore.loadPages();
+      }
+      setStore(nextStore);
+      setPages(loadedPages);
+      setSelectedTitle((findJournalByDate(loadedPages) ?? loadedPages[0]).title);
+      setIsEditing(false);
+      setSearch('');
+      showNotice(message.replace('{count}', String(loadedPages.length)));
+    },
+    [showNotice]
+  );
+
+  useEffect(() => {
+    const restoredToken = savedGitHub?.token;
+    if (!savedGitHub || !restoredToken) return;
+    let cancelled = false;
+    setIsLoading(true);
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Restore keeps cancellation, credential verification, graph loading, and user-facing recovery in one guarded async effect.
+    const restore = async () => {
+      try {
+        const github = new GitHubGraphStore(savedGitHub.config, restoredToken);
+        await github.verifyAccess();
+        if (!cancelled) {
+          await activateStore(github, '{count} pages connected from your private GitHub graph.');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setConnectionError(
+            error instanceof Error ? error.message : 'Could not reconnect GitHub.'
+          );
+          setGitHubDialogOpen(true);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [activateStore, savedGitHub]);
+
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 'k') {
@@ -410,18 +633,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!isEditing || isDemo || !selectedPage?.handle || draft === selectedPage.content) return;
+    if (!isEditing || !store || !selectedPage || draft === selectedPage.content) return;
     const page = selectedPage;
     const content = draft;
     const timeout = window.setTimeout(async () => {
       setIsSaving(true);
       try {
-        await savePage(page, content, page.content);
+        const savedPage = await store.savePage(page, content, page.content);
         setPages((current) =>
           reindexPages(
-            current.map((candidate) =>
-              candidate.path === page.path ? { ...candidate, content } : candidate
-            )
+            current.map((candidate) => (candidate.path === page.path ? savedPage : candidate))
           )
         );
         localStorage.removeItem(`loam:draft:${page.path}`);
@@ -433,23 +654,13 @@ export function App() {
       }
     }, 900);
     return () => window.clearTimeout(timeout);
-  }, [draft, isDemo, isEditing, selectedPage, showNotice]);
+  }, [draft, isEditing, selectedPage, showNotice, store]);
 
   const openFolder = async () => {
     setIsLoading(true);
     try {
-      const handle = await pickLogseqFolder();
-      let loadedPages = await readLogseqFolder(handle);
-      if (!findJournalByDate(loadedPages)) {
-        await ensureJournalFile(handle);
-        loadedPages = await readLogseqFolder(handle);
-      }
-      setRoot(handle);
-      setPages(loadedPages);
-      setSelectedTitle((findJournalByDate(loadedPages) ?? loadedPages[0]).title);
-      setIsDemo(false);
-      setIsEditing(false);
-      showNotice(`${loadedPages.length} pages connected from your local graph.`);
+      const localFolder = await pickLocalFolderStore();
+      await activateStore(localFolder, '{count} pages connected from your local graph.');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       showNotice(error instanceof Error ? error.message : 'Could not open that folder.');
@@ -458,21 +669,64 @@ export function App() {
     }
   };
 
-  const refreshFolder = async () => {
-    if (!root) return openFolder();
+  const refreshGraph = async () => {
+    if (!store) return;
     setIsLoading(true);
     try {
-      const loadedPages = await readLogseqFolder(root);
+      const loadedPages = await store.loadPages();
       setPages(loadedPages);
       setSelectedTitle((current) =>
         loadedPages.some((page) => page.title === current) ? current : (loadedPages[0]?.title ?? '')
       );
-      showNotice('Graph refreshed from disk.');
+      showNotice(
+        store.kind === 'github' ? 'Graph refreshed from GitHub.' : 'Graph refreshed from disk.'
+      );
     } catch (error) {
       showNotice(error instanceof Error ? error.message : 'Could not refresh the graph.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const connectGitHub = async (event: Event) => {
+    event.preventDefault();
+    if (persistentToken && !persistenceAcknowledged) {
+      setConnectionError('Acknowledge persistent token storage or use session-only storage.');
+      return;
+    }
+    setConnectionError('');
+    setIsLoading(true);
+    try {
+      const github = new GitHubGraphStore(githubConfig, githubToken);
+      await github.verifyAccess();
+      await activateStore(github, '{count} pages connected from your private GitHub graph.');
+      saveGitHubConnection(github.config, githubToken, persistentToken);
+      setGitHubCredentialStored(true);
+      setGitHubDialogOpen(false);
+      setPersistenceAcknowledged(false);
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Could not connect GitHub.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const disconnectGitHub = async () => {
+    forgetGitHubConnection();
+    await clearGitHubGraphCache();
+    if (store?.kind === 'github') {
+      setStore(undefined);
+      setPages(demoIndex);
+      setSelectedTitle(todayTitle);
+      setIsEditing(false);
+    }
+    setGitHubToken('');
+    setGitHubCredentialStored(false);
+    setPersistentToken(false);
+    setPersistenceAcknowledged(false);
+    setConnectionError('');
+    setGitHubDialogOpen(false);
+    showNotice('GitHub disconnected. The local private-note cache was cleared.');
   };
 
   const selectPage = (title: string) => {
@@ -487,12 +741,12 @@ export function App() {
       selectPage(existing.title);
       return;
     }
-    if (!root) return;
+    if (!store) return;
 
     setIsLoading(true);
     try {
-      await ensureJournalFile(root);
-      const loadedPages = await readLogseqFolder(root);
+      await store.ensureJournal();
+      const loadedPages = await store.loadPages();
       setPages(loadedPages);
       const today = findJournalByDate(loadedPages);
       if (today) selectPage(today.title);
@@ -535,18 +789,20 @@ export function App() {
     if (!selectedPage) return;
     setIsSaving(true);
     try {
-      if (!isDemo) await savePage(selectedPage, draft, selectedPage.content);
+      const savedPage = store
+        ? await store.savePage(selectedPage, draft, selectedPage.content)
+        : { ...selectedPage, content: draft };
       setPages((current) =>
-        reindexPages(
-          current.map((page) =>
-            page.path === selectedPage.path ? { ...page, content: draft } : page
-          )
-        )
+        reindexPages(current.map((page) => (page.path === selectedPage.path ? savedPage : page)))
       );
       setIsEditing(false);
       localStorage.removeItem(`loam:draft:${selectedPage.path}`);
       showNotice(
-        isDemo ? 'Demo changes are kept until you reload.' : 'Saved to your local folder.'
+        isDemo
+          ? 'Demo changes are kept until you reload.'
+          : store?.kind === 'github'
+            ? 'Committed to your private GitHub graph.'
+            : 'Saved to your local folder.'
       );
     } catch (error) {
       localStorage.setItem(`loam:draft:${selectedPage.path}`, draft);
@@ -565,10 +821,10 @@ export function App() {
 
   const handleCreatePage = async (event: Event) => {
     event.preventDefault();
-    if (!root || !newPageTitle.trim()) return;
+    if (!store || !newPageTitle.trim()) return;
     try {
-      await createPageFile(root, newPageTitle);
-      const loadedPages = await readLogseqFolder(root);
+      await store.createPage(newPageTitle);
+      const loadedPages = await store.loadPages();
       setPages(loadedPages);
       const created = loadedPages.find(
         (page) => normalizePageTitle(page.title) === normalizePageTitle(newPageTitle)
@@ -583,12 +839,12 @@ export function App() {
 
   const handleCapture = async (event: Event) => {
     event.preventDefault();
-    if (!root || !captureText.trim()) return;
+    if (!store || !captureText.trim()) return;
     const captured = captureText.trim();
     setCaptureText('');
     try {
-      await appendJournalCapture(root, captured);
-      const loadedPages = await readLogseqFolder(root);
+      await store.appendJournalCapture(captured);
+      const loadedPages = await store.loadPages();
       setPages(loadedPages);
       const today = findJournalByDate(loadedPages);
       if (today) selectPage(today.title);
@@ -614,16 +870,34 @@ export function App() {
         <div className='topbar-actions'>
           <div className={`connection-status ${isDemo ? 'status-demo' : ''}`}>
             <span className='status-dot' />
-            {isDemo ? 'Demo graph' : 'Local graph connected'}
+            {isDemo
+              ? 'Demo graph'
+              : store?.kind === 'github'
+                ? 'Private GitHub graph'
+                : 'Local folder connected'}
           </div>
           <button
-            className='button button-quiet'
+            aria-label={store?.kind === 'folder' ? 'Switch local folder' : 'Open local folder'}
+            className='button button-quiet topbar-storage-button'
             disabled={isLoading}
             onClick={openFolder}
             type='button'
           >
             <Icon name='folder' size={16} />
-            {isLoading ? 'Opening…' : isDemo ? 'Open folder' : 'Switch folder'}
+            <span>{store?.kind === 'folder' ? 'Switch folder' : 'Local folder'}</span>
+          </button>
+          <button
+            aria-label='Connect a private GitHub graph'
+            className='button button-quiet topbar-storage-button'
+            disabled={isLoading}
+            onClick={() => {
+              setConnectionError('');
+              setGitHubDialogOpen(true);
+            }}
+            type='button'
+          >
+            <Icon name='cloud' size={16} />
+            <span>{store?.kind === 'github' ? 'GitHub settings' : 'Private GitHub'}</span>
           </button>
         </div>
       </header>
@@ -636,9 +910,7 @@ export function App() {
             </div>
             <div>
               <p className='sidebar-label'>CURRENT GRAPH</p>
-              <p className='graph-name'>
-                {isDemo ? 'A little starting point' : 'Local Logseq graph'}
-              </p>
+              <p className='graph-name'>{isDemo ? 'A little starting point' : store?.label}</p>
             </div>
           </div>
 
@@ -720,12 +992,13 @@ export function App() {
             <button
               className='button button-quiet sidebar-refresh'
               disabled={isLoading}
-              onClick={refreshFolder}
+              onClick={refreshGraph}
               type='button'
             >
-              <Icon name='refresh' size={15} /> Refresh from disk
+              <Icon name='refresh' size={15} />
+              {store?.kind === 'github' ? 'Refresh from GitHub' : 'Refresh from disk'}
             </button>
-            {root && (
+            {store && (
               <form className='new-page-form' onSubmit={handleCreatePage}>
                 <input
                   aria-label='Create a new page'
@@ -817,8 +1090,12 @@ export function App() {
                 )}
               </article>
               <p className='privacy-line'>
-                <span className='privacy-lock'>✦</span> Your notes are read directly from the folder
-                you choose. Nothing is uploaded.
+                <span className='privacy-lock'>✦</span>
+                {store?.kind === 'github'
+                  ? 'Private notes are cached on this device and sent only to GitHub when you save.'
+                  : store?.kind === 'folder'
+                    ? 'Your notes are read directly from the folder you choose. Nothing is uploaded.'
+                    : 'Demo changes stay in this browser until you reload.'}
               </p>
             </>
           ) : (
@@ -916,7 +1193,7 @@ export function App() {
         </aside>
       </div>
 
-      {root && !isEditing && (
+      {store && !isEditing && (
         <form className='quick-create' onSubmit={handleCapture}>
           <Icon name='plus' size={17} />
           <input
@@ -930,6 +1207,23 @@ export function App() {
           </button>
         </form>
       )}
+      <GitHubConnectionDialog
+        acknowledged={persistenceAcknowledged}
+        busy={isLoading}
+        config={githubConfig}
+        connected={githubCredentialStored}
+        error={connectionError}
+        onAcknowledged={setPersistenceAcknowledged}
+        onClose={() => setGitHubDialogOpen(false)}
+        onConfig={setGitHubConfig}
+        onConnect={connectGitHub}
+        onDisconnect={() => void disconnectGitHub()}
+        onPersistent={setPersistentToken}
+        onToken={setGitHubToken}
+        open={githubDialogOpen}
+        persistent={persistentToken}
+        token={githubToken}
+      />
       {notice && (
         <div className='toast' role='status'>
           <span className='toast-mark'>

@@ -2,6 +2,18 @@ import { buildPageIndex, type IndexedPage, type PageInput, pageTitleFromPath } f
 
 export interface LocalPage extends IndexedPage {
   handle?: FileSystemFileHandle;
+  /** Storage-specific optimistic revision, such as a Git blob SHA. */
+  revision?: string;
+}
+
+export interface GraphStore {
+  readonly kind: 'folder' | 'github';
+  readonly label: string;
+  loadPages(): Promise<LocalPage[]>;
+  savePage(page: LocalPage, content: string, expectedContent?: string): Promise<LocalPage>;
+  ensureJournal(date?: Date): Promise<void>;
+  appendJournalCapture(content: string, date?: Date): Promise<void>;
+  createPage(title: string): Promise<void>;
 }
 
 interface DirectoryPickerOptions {
@@ -57,6 +69,10 @@ export async function pickLogseqFolder(): Promise<FileSystemDirectoryHandle> {
   }
 
   return window.showDirectoryPicker({ mode: 'readwrite' });
+}
+
+export async function pickLocalFolderStore(): Promise<GraphStore> {
+  return new LocalFolderGraphStore(await pickLogseqFolder());
 }
 
 export async function readLogseqFolder(root: FileSystemDirectoryHandle): Promise<LocalPage[]> {
@@ -156,11 +172,7 @@ export async function createPageFile(
   title: string
 ): Promise<void> {
   const pagesDirectory = await root.getDirectoryHandle('pages', { create: true });
-  const filename = `${title
-    .trim()
-    .replaceAll('/', '___')
-    .replace(/[\\:*?"<>|]/g, '-')
-    .replace(/\s+/g, '_')}.md`;
+  const filename = pagePathForTitle(title).slice('pages/'.length);
   let file: FileSystemFileHandle;
   try {
     await pagesDirectory.getFileHandle(filename);
@@ -177,4 +189,44 @@ export async function createPageFile(
   const writable = await file.createWritable();
   await writable.write(`# ${title.trim()}\n\n- `);
   await writable.close();
+}
+
+export function pagePathForTitle(title: string): string {
+  const filename = `${title
+    .trim()
+    .replaceAll('/', '___')
+    .replace(/[\\:*?"<>|]/g, '-')
+    .replace(/\s+/g, '_')}.md`;
+  return `pages/${filename}`;
+}
+
+class LocalFolderGraphStore implements GraphStore {
+  readonly kind = 'folder' as const;
+  readonly label = 'Local Logseq folder';
+  readonly #root: FileSystemDirectoryHandle;
+
+  constructor(root: FileSystemDirectoryHandle) {
+    this.#root = root;
+  }
+
+  loadPages(): Promise<LocalPage[]> {
+    return readLogseqFolder(this.#root);
+  }
+
+  async savePage(page: LocalPage, content: string, expectedContent?: string): Promise<LocalPage> {
+    await savePage(page, content, expectedContent);
+    return { ...page, content };
+  }
+
+  async ensureJournal(date = new Date()): Promise<void> {
+    await ensureJournalFile(this.#root, date);
+  }
+
+  appendJournalCapture(content: string, date = new Date()): Promise<void> {
+    return appendJournalCapture(this.#root, content, date);
+  }
+
+  createPage(title: string): Promise<void> {
+    return createPageFile(this.#root, title);
+  }
 }

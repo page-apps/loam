@@ -29,6 +29,8 @@ lerna-debug.log*
 coverage/
 *.lcov
 .nyc_output
+playwright-report/
+test-results/
 
 # Misc
 *.tsbuildinfo

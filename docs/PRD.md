@@ -4,7 +4,7 @@
 
 **Status:** Draft
 **Product stage:** MVP
-**Primary platforms:** Desktop Web/PWA, Android PWA
+**Primary platforms:** Desktop Web/PWA, Android PWA, iOS PWA through private GitHub storage
 **Primary user:** Single-user personal workspace
 **Core principle:** Local-first, journal-first, block-first
 
@@ -101,11 +101,11 @@ Users should not need to decide where something belongs before writing it down.
 
 Organization can happen afterwards.
 
-## 5.4 Local-first
+## 5.4 User-controlled storage
 
-The canonical workspace is stored in user-controlled local files.
+The canonical workspace is stored in user-controlled Markdown files, either in a directly selected local folder or a separate private GitHub graph repository.
 
-The application must remain useful without a cloud account or internet connection.
+Local-folder mode must remain useful without a cloud account or internet connection. GitHub mode may require connectivity to refresh and commit, but must preserve unsaved drafts locally when offline.
 
 ## 5.5 Portable data
 
@@ -133,7 +133,7 @@ The MVP includes:
 8. Full-text block search
 9. Basic block properties
 10. Desktop and mobile responsive experience
-11. Local workspace persistence
+11. Local-folder and private-GitHub graph persistence
 12. Basic migration/import from existing content
 
 The MVP explicitly does not include:
@@ -578,7 +578,7 @@ Backlinks are derived indexes and do not need to be written into the canonical f
 
 # 18. Persistence
 
-Canonical content must remain locally stored and portable.
+Canonical content must remain user-controlled and portable. It may live in a selected local graph folder or a private GitHub graph repository; it must never be embedded in the public PWA artifact.
 
 Preferred persistence model:
 
@@ -601,6 +601,24 @@ The local index may include:
 * full-text index.
 
 The index must be rebuildable from canonical workspace data.
+
+### 18.1 Local folder
+
+Where the File System Access API is available, the browser reads and writes the selected graph root directly and detects external changes before overwriting a page.
+
+### 18.2 Private GitHub graph
+
+For mobile and browsers without writable directory access, the user may connect one private repository with a fine-grained, expiring PAT limited to that repository and **Contents: read and write**.
+
+Requirements:
+
+* session-only token storage by default;
+* explicit acknowledgement before persistent token storage;
+* no token in source, URLs, logs, service-worker caches, build output or telemetry;
+* optimistic writes using the expected Git blob revision;
+* a separate public app repository and private graph repository as the recommended topology;
+* private local caches must be disclosed and removable;
+* failed or offline saves must retain recoverable local drafts.
 
 ---
 
