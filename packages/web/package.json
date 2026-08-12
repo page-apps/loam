@@ -33,14 +33,14 @@
     "preact": "^10.29.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "@preact/preset-vite": "^2.10.5",
+    "@playwright/test": "^1.62.1",
+    "@preact/preset-vite": "^2.10.6",
     "@types/express": "latest",
     "@types/node": "latest",
     "@types/supertest": "latest",
     "cpy-cli": "latest",
     "supertest": "latest",
-    "vite": "^8.0.3",
+    "vite": "^8.2.1",
     "vitest": "latest"
   },
   "publishConfig": {
