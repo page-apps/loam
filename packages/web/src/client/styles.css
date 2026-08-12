@@ -65,6 +65,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
 .connection-form input:not([type='checkbox']):focus { background: white; border-color: #cda193; box-shadow: 0 0 0 3px rgba(214, 95, 66, .11); }
 .repository-fields { display: grid; gap: 10px; grid-template-columns: 1fr 1.2fr .75fr; }
 .repository-fields label { min-width: 0; }
+.shared-credential-card { align-items: center; background: #f2f1eb; border: 1px solid #dedfd6; border-radius: 9px; display: flex; gap: 14px; justify-content: space-between; padding: 12px; }
+.shared-credential-card.shared-selected { background: #edf3ed; border-color: #d5e1d5; }
+.shared-credential-card > div { display: flex; flex: 1; flex-direction: column; gap: 3px; }
+.shared-credential-card strong { color: #50594f; font-size: 11px; }
+.shared-credential-card span { color: #747a71; font-size: 10px; line-height: 1.45; }
+.shared-credential-card .button { flex: 0 0 auto; text-decoration: none; }
+.shared-selection { align-items: center; background: #e7f0e7; border: 1px solid #d5e2d5; border-radius: 8px; color: #4d6a54; display: flex; font-size: 11px; gap: 8px; padding: 11px 12px; }
 .permission-callout { background: #eef3ed; border: 1px solid #dce5db; border-radius: 8px; color: #647469; display: flex; flex-direction: column; font-size: 10px; gap: 4px; line-height: 1.45; padding: 11px 12px; }
 .permission-callout strong { color: #456050; font-size: 11px; }
 .security-disclosure { background: #f7eee8; border-left: 3px solid #d49a7f; color: #79685d; font-size: 10px; line-height: 1.55; margin: 0; padding: 10px 11px; }
@@ -239,6 +246,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
   .dialog-heading h2 { font-size: 28px; }
   .repository-fields { grid-template-columns: 1fr 1fr; }
   .repository-fields label:last-child { grid-column: 1 / -1; }
+  .shared-credential-card { align-items: stretch; flex-direction: column; }
+  .shared-credential-card .button { width: 100%; }
   .connection-form input:not([type='checkbox']) { font-size: 16px; }
   .dialog-actions { align-items: stretch; flex-direction: column-reverse; }
   .dialog-actions .button { width: 100%; }

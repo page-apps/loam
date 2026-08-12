@@ -27,12 +27,16 @@ The File System Access API is available in Chromium browsers on desktop and Andr
 Choose **Private GitHub**, then enter:
 
 1. The repository owner, repository name, and branch.
-2. A fine-grained, expiring PAT limited to that repository.
+2. A fine-grained, expiring PAT limited to that repository, or an explicitly selected shared PAT from Personal Hub.
 3. Repository permission **Contents: read and write**.
 
 The token is stored in `sessionStorage` by default. Persistent `localStorage` is an explicit trusted-device opt-in with a second acknowledgement. The PWA sends the token only to `https://api.github.com`; it is never included in source, URLs, the service worker, build output, analytics, or GitHub Actions.
 
-The Git tree and blob content are cached by revision in IndexedDB. This avoids downloading unchanged pages repeatedly and allows a previously loaded graph to remain readable when GitHub is unreachable. The cache contains private note content in plaintext under the application origin. **Disconnect and clear cache** removes the saved connection, token, and private graph cache.
+When `page-apps.github.io` has a credential configured by [Personal Hub](https://page-apps.github.io/), Loam offers **Use shared PAT**. This remains an explicit choice: Loam retrieves the shared token only for the connection attempt, verifies write access to the selected graph, records that Loam uses the shared vault, and does not duplicate the token into its session or persistent token keys. **Disconnect and clear cache** leaves the hub credential intact.
+
+A fine-grained PAT can select repositories under only one resource owner. To reuse the Page Apps token, put the private graph under `page-apps` and include it when creating the token. A graph owned by another account needs a separate PAT. The shared option also increases blast radius because the token can write every selected repository and all Page Apps share one browser origin; a dedicated graph-only token remains the safer choice for sensitive notes.
+
+The Git tree and blob content are cached by revision in IndexedDB. This avoids downloading unchanged pages repeatedly and allows a previously loaded graph to remain readable when GitHub is unreachable. The cache contains private note content in plaintext under the application origin. **Disconnect and clear cache** removes the saved Loam connection, any Loam-specific token, and the private graph cache. It does not remove a PAT managed by Personal Hub.
 
 Keep the public app repository and private graph repository separate. A PAT restricted to the graph repository cannot modify the public JavaScript that will receive that token on a future visit.
 

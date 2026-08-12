@@ -26,7 +26,7 @@ Loam exposes one `GraphStore` capability to application code and supplies two im
 
 ### Private GitHub store
 
-- Uses a fine-grained PAT entered at runtime.
+- Uses a fine-grained PAT entered at runtime or explicitly selected from the Page Apps shared browser vault.
 - Targets one owner, repository, and branch selected by the user.
 - Requires only repository **Contents: read and write**.
 - Reads the Git tree, fetches Markdown blobs, and indexes them in the browser.
@@ -34,14 +34,16 @@ Loam exposes one `GraphStore` capability to application code and supplies two im
 - Includes the expected blob SHA on updates so concurrent changes fail as recoverable conflicts.
 - Keeps the last complete Markdown tree and unchanged blob content in an app-owned IndexedDB cache keyed by repository and Git SHA.
 
-Application components receive the graph-store capability, not the PAT. The token remains encapsulated in the GitHub store.
+The connection boundary resolves a credential only after the user submits the repository form. Normal graph and editor components receive the graph-store capability, not the PAT. The token remains encapsulated in the GitHub store after connection.
 
 ## Credential policy
 
 - Session storage is the default.
 - Persistent storage is an explicit trusted-device opt-in and requires acknowledgement of the displayed security disclosure.
+- A shared Page Apps PAT is never selected automatically. Loam displays its availability, requires an explicit **Use shared PAT** action, and independently verifies write access to the chosen graph.
+- Shared mode records only a source marker and graph configuration in Loam storage. It does not duplicate the token from the framework-owned `repo-apps:credentials:v1` vault.
 - The connection target may persist without the token so reconnecting is easier.
-- Disconnect removes session and persistent credentials and deletes the private-content cache.
+- Disconnect removes Loam's source marker, session and persistent credentials, and private-content cache. It never removes the shared vault; global removal belongs to Personal Hub.
 - Tokens are never placed in URLs, source, build artifacts, service-worker caches, telemetry, or logs.
 - Requests use `cache: no-store`, omit ambient credentials, and send no referrer.
 - The application Content Security Policy restricts connections to its own origin, GitHub’s API, and the configured font hosts.
@@ -62,7 +64,9 @@ private graph repository
 user browser
 ```
 
-The graph PAT should not have access to the public app repository. This prevents a compromised data credential from modifying the future code that receives it.
+The safest topology gives the graph a dedicated PAT that cannot access any public app repository. This prevents a compromised data credential from modifying future code that receives it.
+
+Shared-PAT mode is an explicit convenience tradeoff. A fine-grained PAT has one resource owner, so the graph must be owned by `page-apps` to share the token used by Quick Log and Bookmarks. That token can write every selected repository. Compromise of any same-origin app therefore has a larger blast radius than the dedicated-token topology.
 
 ## Mobile and offline behavior
 

@@ -6,6 +6,9 @@ import {
   type GitHubGraphConfig,
   GitHubGraphStore,
   loadSavedGitHubConnection,
+  loadSharedGitHubCredential,
+  readSharedGitHubCredentialSummary,
+  type SharedGitHubCredentialSummary,
   saveGitHubConnection,
 } from './github-graph.js';
 import {
@@ -235,6 +238,11 @@ function searchPageBlocks(index: BlockSearchResult[], search: string): BlockSear
   return index.filter((result) => result.searchable.includes(query)).slice(0, 40);
 }
 
+function resolveGitHubConnectionToken(usingShared: boolean, ownToken: string): string {
+  if (!usingShared) return ownToken;
+  return loadSharedGitHubCredential()?.token ?? '';
+}
+
 function InlineContent({ text, onLink }: { text: string; onLink: (target: string) => void }) {
   const tokens = text.split(/(\[\[[^\]]+\]\]|#[\w/-]+|\*\*[^*]+\*\*)/g);
   const tokenCounts = new Map<string, number>();
@@ -365,6 +373,8 @@ interface GitHubConnectionDialogProps {
   busy: boolean;
   error: string;
   connected: boolean;
+  sharedCredential?: SharedGitHubCredentialSummary;
+  usingShared: boolean;
   onClose: () => void;
   onConfig: (config: GitHubGraphConfig) => void;
   onToken: (token: string) => void;
@@ -372,6 +382,52 @@ interface GitHubConnectionDialogProps {
   onAcknowledged: (acknowledged: boolean) => void;
   onConnect: (event: Event) => void;
   onDisconnect: () => void;
+  onUseOwnToken: () => void;
+  onUseShared: () => void;
+}
+
+interface SharedCredentialChooserProps {
+  credential?: SharedGitHubCredentialSummary;
+  selected: boolean;
+  onUseOwnToken: () => void;
+  onUseShared: () => void;
+}
+
+function SharedCredentialChooser({
+  credential,
+  selected,
+  onUseOwnToken,
+  onUseShared,
+}: SharedCredentialChooserProps) {
+  return (
+    <div className={`shared-credential-card ${selected ? 'shared-selected' : ''}`}>
+      <div>
+        <strong>
+          {credential
+            ? `Shared Page Apps PAT${credential.account ? ` · @${credential.account}` : ''}`
+            : 'No shared Page Apps PAT found'}
+        </strong>
+        <span>
+          {credential
+            ? 'Saved by the hub in this browser. Loam will still verify the graph below.'
+            : 'Set one up in Personal Hub to reuse it across supported Page Apps.'}
+        </span>
+      </div>
+      {credential ? (
+        <button
+          className={`button ${selected ? 'button-quiet' : 'button-primary'}`}
+          onClick={selected ? onUseOwnToken : onUseShared}
+          type='button'
+        >
+          {selected ? 'Use a different PAT' : 'Use shared PAT'}
+        </button>
+      ) : (
+        <a className='button button-quiet' href='https://page-apps.github.io/'>
+          Open Personal Hub
+        </a>
+      )}
+    </div>
+  );
 }
 
 function GitHubConnectionDialog({
@@ -383,6 +439,8 @@ function GitHubConnectionDialog({
   busy,
   error,
   connected,
+  sharedCredential,
+  usingShared,
   onClose,
   onConfig,
   onToken,
@@ -390,6 +448,8 @@ function GitHubConnectionDialog({
   onAcknowledged,
   onConnect,
   onDisconnect,
+  onUseOwnToken,
+  onUseShared,
 }: GitHubConnectionDialogProps) {
   if (!open) return null;
 
@@ -415,6 +475,12 @@ function GitHubConnectionDialog({
           on mobile without copying it into the public PWA deployment.
         </p>
         <form className='connection-form' onSubmit={onConnect}>
+          <SharedCredentialChooser
+            credential={sharedCredential}
+            onUseOwnToken={onUseOwnToken}
+            onUseShared={onUseShared}
+            selected={usingShared}
+          />
           <div className='repository-fields'>
             <label>
               Owner
@@ -446,42 +512,53 @@ function GitHubConnectionDialog({
               />
             </label>
           </div>
-          <label>
-            Fine-grained personal access token
-            <input
-              autoCapitalize='none'
-              autoComplete='off'
-              onInput={(event) => onToken(event.currentTarget.value)}
-              placeholder='github_pat_…'
-              required
-              spellcheck={false}
-              type='password'
-              value={token}
-            />
-          </label>
+          {usingShared && sharedCredential ? (
+            <div className='shared-selection' role='status'>
+              <Icon name='check' size={16} />
+              Shared PAT selected. The token is not copied into Loam storage.
+            </div>
+          ) : (
+            <label>
+              Fine-grained personal access token
+              <input
+                autoCapitalize='none'
+                autoComplete='off'
+                onInput={(event) => onToken(event.currentTarget.value)}
+                placeholder='github_pat_…'
+                required
+                spellcheck={false}
+                type='password'
+                value={token}
+              />
+            </label>
+          )}
           <div className='permission-callout'>
             <strong>Minimum GitHub permission</strong>
             <span>Repository access: only {config.repository || 'your graph repository'}</span>
             <span>Repository permission: Contents — read and write</span>
           </div>
           <p className='security-disclosure'>
-            This personal PWA uses a GitHub token in your browser. A security flaw in this app, a
-            dependency, a browser extension, or another app on the same origin may expose the token
-            and locally cached private notes. Use a fine-grained, expiring token limited to this
-            repository. Session-only storage is recommended.
+            A security flaw in this app, a dependency, a browser extension, or another app on the
+            same origin may expose the token and locally cached private notes. Use a fine-grained,
+            expiring token limited to this graph. One shared token only works when the graph has the
+            same resource owner as the other selected repositories.
           </p>
-          <label className='checkbox-field'>
-            <input
-              checked={persistent}
-              onChange={(event) => {
-                onPersistent(event.currentTarget.checked);
-                if (!event.currentTarget.checked) onAcknowledged(false);
-              }}
-              type='checkbox'
-            />
-            <span>Keep the token on this trusted device instead of this browser session only.</span>
-          </label>
-          {persistent && (
+          {!usingShared && (
+            <label className='checkbox-field'>
+              <input
+                checked={persistent}
+                onChange={(event) => {
+                  onPersistent(event.currentTarget.checked);
+                  if (!event.currentTarget.checked) onAcknowledged(false);
+                }}
+                type='checkbox'
+              />
+              <span>
+                Keep the token on this trusted device instead of this browser session only.
+              </span>
+            </label>
+          )}
+          {!usingShared && persistent && (
             <label className='checkbox-field acknowledgement-field'>
               <input
                 checked={acknowledged}
@@ -532,8 +609,16 @@ export function App() {
   const [githubToken, setGitHubToken] = useState(savedGitHub?.token ?? '');
   const [githubCredentialStored, setGitHubCredentialStored] = useState(Boolean(savedGitHub?.token));
   const [persistentToken, setPersistentToken] = useState(savedGitHub?.persistent ?? false);
+  const [sharedCredential, setSharedCredential] = useState<
+    SharedGitHubCredentialSummary | undefined
+  >(() => readSharedGitHubCredentialSummary());
+  const [usingSharedToken, setUsingSharedToken] = useState(savedGitHub?.shared ?? false);
   const [persistenceAcknowledged, setPersistenceAcknowledged] = useState(false);
-  const [connectionError, setConnectionError] = useState('');
+  const [connectionError, setConnectionError] = useState(
+    savedGitHub?.shared && !savedGitHub.token
+      ? 'The shared Page Apps PAT was removed. Set it up again or use a different token.'
+      : ''
+  );
   const searchInput = useRef<HTMLInputElement>(null);
 
   const isDemo = !store;
@@ -572,6 +657,14 @@ export function App() {
   const showNotice = useCallback((message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(''), 4200);
+  }, []);
+
+  const openGitHubDialog = useCallback(() => {
+    const currentSharedCredential = readSharedGitHubCredentialSummary();
+    setSharedCredential(currentSharedCredential);
+    if (!currentSharedCredential) setUsingSharedToken(false);
+    setConnectionError('');
+    setGitHubDialogOpen(true);
   }, []);
 
   const activateStore = useCallback(
@@ -633,6 +726,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const refreshSharedCredential = () => {
+      const current = readSharedGitHubCredentialSummary();
+      setSharedCredential(current);
+      if (!current) setUsingSharedToken(false);
+    };
+    window.addEventListener('storage', refreshSharedCredential);
+    return () => window.removeEventListener('storage', refreshSharedCredential);
+  }, []);
+
+  useEffect(() => {
     if (!isEditing || !store || !selectedPage || draft === selectedPage.content) return;
     const page = selectedPage;
     const content = draft;
@@ -690,17 +793,29 @@ export function App() {
 
   const connectGitHub = async (event: Event) => {
     event.preventDefault();
-    if (persistentToken && !persistenceAcknowledged) {
+    if (!usingSharedToken && persistentToken && !persistenceAcknowledged) {
       setConnectionError('Acknowledge persistent token storage or use session-only storage.');
       return;
     }
     setConnectionError('');
     setIsLoading(true);
     try {
-      const github = new GitHubGraphStore(githubConfig, githubToken);
+      const selectedToken = resolveGitHubConnectionToken(usingSharedToken, githubToken);
+      if (!selectedToken) {
+        throw new Error(
+          'The shared Page Apps PAT is no longer available. Set it up again or use a different token.'
+        );
+      }
+      const github = new GitHubGraphStore(githubConfig, selectedToken);
       await github.verifyAccess();
       await activateStore(github, '{count} pages connected from your private GitHub graph.');
-      saveGitHubConnection(github.config, githubToken, persistentToken);
+      saveGitHubConnection(
+        github.config,
+        selectedToken,
+        usingSharedToken ? false : persistentToken,
+        usingSharedToken
+      );
+      if (usingSharedToken) setGitHubToken('');
       setGitHubCredentialStored(true);
       setGitHubDialogOpen(false);
       setPersistenceAcknowledged(false);
@@ -712,6 +827,7 @@ export function App() {
   };
 
   const disconnectGitHub = async () => {
+    const sharedWasSelected = usingSharedToken;
     forgetGitHubConnection();
     await clearGitHubGraphCache();
     if (store?.kind === 'github') {
@@ -723,10 +839,15 @@ export function App() {
     setGitHubToken('');
     setGitHubCredentialStored(false);
     setPersistentToken(false);
+    setUsingSharedToken(false);
     setPersistenceAcknowledged(false);
     setConnectionError('');
     setGitHubDialogOpen(false);
-    showNotice('GitHub disconnected. The local private-note cache was cleared.');
+    showNotice(
+      sharedWasSelected
+        ? 'GitHub disconnected and the local cache was cleared. Your shared PAT remains in Personal Hub.'
+        : 'GitHub disconnected. The local private-note cache was cleared.'
+    );
   };
 
   const selectPage = (title: string) => {
@@ -890,10 +1011,7 @@ export function App() {
             aria-label='Connect a private GitHub graph'
             className='button button-quiet topbar-storage-button'
             disabled={isLoading}
-            onClick={() => {
-              setConnectionError('');
-              setGitHubDialogOpen(true);
-            }}
+            onClick={openGitHubDialog}
             type='button'
           >
             <Icon name='cloud' size={16} />
@@ -1220,9 +1338,21 @@ export function App() {
         onDisconnect={() => void disconnectGitHub()}
         onPersistent={setPersistentToken}
         onToken={setGitHubToken}
+        onUseOwnToken={() => {
+          setUsingSharedToken(false);
+          setConnectionError('');
+        }}
+        onUseShared={() => {
+          setUsingSharedToken(true);
+          setPersistentToken(false);
+          setPersistenceAcknowledged(false);
+          setConnectionError('');
+        }}
         open={githubDialogOpen}
         persistent={persistentToken}
+        sharedCredential={sharedCredential}
         token={githubToken}
+        usingShared={usingSharedToken}
       />
       {notice && (
         <div className='toast' role='status'>
