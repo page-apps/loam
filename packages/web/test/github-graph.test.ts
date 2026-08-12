@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   type GitHubGraphError,
   GitHubGraphStore,
+  loadSavedGitHubConnection,
+  readSharedGitHubCredentialSummary,
+  saveGitHubConnection,
+  sharedCredentialKey,
   validateGitHubGraphConfig,
 } from '../src/client/github-graph.js';
 
@@ -116,5 +120,100 @@ describe('GitHub graph configuration', () => {
     expect(() =>
       validateGitHubGraphConfig({ owner: 'cmwen', repository: '../notes', branch: 'main' })
     ).toThrow('valid GitHub owner');
+  });
+});
+
+class MemoryStorage implements Storage {
+  readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return [...this.values.keys()][index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
+}
+
+describe('shared Page Apps credential', () => {
+  it('uses the hub vault without copying its token into Loam storage', () => {
+    const local = new MemoryStorage();
+    const session = new MemoryStorage();
+    vi.stubGlobal('localStorage', local);
+    vi.stubGlobal('sessionStorage', session);
+    local.setItem(
+      sharedCredentialKey,
+      JSON.stringify({
+        version: 1,
+        scope: 'shared',
+        credential: {
+          kind: 'pat',
+          token: 'github_pat_shared_test',
+          createdAt: '2026-08-12T00:00:00.000Z',
+          account: 'cmwen',
+        },
+        apps: { 'page-apps-hub': { connectedAt: '2026-08-12T00:00:00.000Z' } },
+      })
+    );
+
+    expect(readSharedGitHubCredentialSummary()).toEqual({
+      account: 'cmwen',
+      createdAt: '2026-08-12T00:00:00.000Z',
+    });
+    expect(JSON.stringify(readSharedGitHubCredentialSummary())).not.toContain('shared_test');
+
+    saveGitHubConnection(
+      { owner: 'page-apps', repository: 'loam-graph', branch: 'main' },
+      'github_pat_shared_test',
+      false,
+      true
+    );
+
+    const restored = loadSavedGitHubConnection();
+    expect(restored).toMatchObject({
+      config: { owner: 'page-apps', repository: 'loam-graph', branch: 'main' },
+      token: 'github_pat_shared_test',
+      persistent: false,
+      shared: true,
+    });
+    expect(local.getItem('loam:github-graph:token:persistent:v1')).toBeNull();
+    expect(session.getItem('loam:github-graph:token:session:v1')).toBeNull();
+    const vault = JSON.parse(local.getItem(sharedCredentialKey) ?? 'null');
+    expect(vault.apps.loam.repositoryHint).toBe('page-apps/loam-graph');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('refuses a stale shared-token selection', () => {
+    const local = new MemoryStorage();
+    vi.stubGlobal('localStorage', local);
+    vi.stubGlobal('sessionStorage', new MemoryStorage());
+
+    expect(() =>
+      saveGitHubConnection(
+        { owner: 'page-apps', repository: 'loam-graph', branch: 'main' },
+        'github_pat_no_longer_shared',
+        false,
+        true
+      )
+    ).toThrow('no longer available');
+
+    vi.unstubAllGlobals();
   });
 });

@@ -11,6 +11,10 @@ const apiBase = 'https://api.github.com';
 const connectionKey = 'loam:github-graph:connection:v1';
 const sessionTokenKey = 'loam:github-graph:token:session:v1';
 const persistentTokenKey = 'loam:github-graph:token:persistent:v1';
+const tokenSourceKey = 'loam:github-graph:token-source:v1';
+export const sharedCredentialKey = 'repo-apps:credentials:v1';
+const sharedTokenSource = 'shared-v1';
+const sharedAppId = 'loam';
 const cacheDatabaseName = 'loam-private-graph-v1';
 const cacheStoreName = 'blobs';
 
@@ -24,6 +28,18 @@ export interface SavedGitHubConnection {
   config: GitHubGraphConfig;
   token?: string;
   persistent: boolean;
+  shared: boolean;
+}
+
+export interface SharedGitHubCredential {
+  token: string;
+  createdAt: string;
+  account?: string;
+}
+
+export interface SharedGitHubCredentialSummary {
+  createdAt: string;
+  account?: string;
 }
 
 export type GitHubGraphErrorCode =
@@ -319,11 +335,35 @@ export class GitHubGraphStore implements GraphStore {
 export function saveGitHubConnection(
   config: GitHubGraphConfig,
   token: string,
-  persistent: boolean
+  persistent: boolean,
+  shared = false
 ): void {
   const validatedConfig = validateGitHubGraphConfig(config);
   const validatedToken = validateToken(token);
+  if (shared) {
+    const envelope = decodeSharedCredentialEnvelope(
+      safeStorageGet(localStorage, sharedCredentialKey)
+    );
+    if (!envelope || envelope.credential.token !== validatedToken) {
+      throw new GitHubGraphError(
+        'authentication',
+        'The shared Page Apps credential is no longer available. Set it up again in the hub or use a different token.'
+      );
+    }
+    envelope.apps[sharedAppId] = {
+      connectedAt: new Date().toISOString(),
+      repositoryHint: `${validatedConfig.owner}/${validatedConfig.repository}`,
+    };
+    safeStorageSet(localStorage, connectionKey, JSON.stringify(validatedConfig));
+    safeStorageSet(localStorage, sharedCredentialKey, JSON.stringify(envelope));
+    safeStorageSet(localStorage, tokenSourceKey, sharedTokenSource);
+    safeStorageRemove(sessionStorage, sessionTokenKey);
+    safeStorageRemove(localStorage, persistentTokenKey);
+    return;
+  }
+
   safeStorageSet(localStorage, connectionKey, JSON.stringify(validatedConfig));
+  safeStorageRemove(localStorage, tokenSourceKey);
   if (persistent) {
     safeStorageSet(localStorage, persistentTokenKey, encodeTokenEnvelope(validatedToken));
     safeStorageRemove(sessionStorage, sessionTokenKey);
@@ -340,10 +380,18 @@ export function loadSavedGitHubConnection(): SavedGitHubConnection | undefined {
   if (!rawConfig) return undefined;
   try {
     const config = validateGitHubGraphConfig(JSON.parse(rawConfig));
+    if (safeStorageGet(localStorage, tokenSourceKey) === sharedTokenSource) {
+      return {
+        config,
+        token: loadSharedGitHubCredential()?.token,
+        persistent: false,
+        shared: true,
+      };
+    }
     const session = decodeTokenEnvelope(safeStorageGet(sessionStorage, sessionTokenKey));
-    if (session) return { config, token: session, persistent: false };
+    if (session) return { config, token: session, persistent: false, shared: false };
     const persistent = decodeTokenEnvelope(safeStorageGet(localStorage, persistentTokenKey));
-    return { config, token: persistent, persistent: Boolean(persistent) };
+    return { config, token: persistent, persistent: Boolean(persistent), shared: false };
   } catch {
     return undefined;
   }
@@ -353,7 +401,23 @@ export function forgetGitHubConnection(): void {
   if (typeof localStorage === 'undefined' || typeof sessionStorage === 'undefined') return;
   safeStorageRemove(localStorage, connectionKey);
   safeStorageRemove(localStorage, persistentTokenKey);
+  safeStorageRemove(localStorage, tokenSourceKey);
   safeStorageRemove(sessionStorage, sessionTokenKey);
+}
+
+export function loadSharedGitHubCredential(): SharedGitHubCredential | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  return decodeSharedCredentialEnvelope(safeStorageGet(localStorage, sharedCredentialKey))
+    ?.credential;
+}
+
+export function readSharedGitHubCredentialSummary(): SharedGitHubCredentialSummary | undefined {
+  const credential = loadSharedGitHubCredential();
+  if (!credential) return undefined;
+  return {
+    createdAt: credential.createdAt,
+    ...(credential.account ? { account: credential.account } : {}),
+  };
 }
 
 export async function clearGitHubGraphCache(): Promise<void> {
@@ -456,6 +520,62 @@ function decodeTokenEnvelope(raw: string | null): string | undefined {
   return value.version === 1 && value.kind === 'pat' && typeof value.token === 'string'
     ? validateToken(value.token)
     : undefined;
+}
+
+interface SharedCredentialEnvelope {
+  version: 1;
+  scope: 'shared';
+  credential: SharedGitHubCredential & { kind: 'pat' };
+  apps: Record<string, { connectedAt: string; repositoryHint?: string }>;
+}
+
+function decodeSharedCredentialEnvelope(raw: string | null): SharedCredentialEnvelope | undefined {
+  if (!raw) return undefined;
+  try {
+    const value = asRecord(JSON.parse(raw));
+    const credential = asRecord(value.credential);
+    const rawApps = asRecord(value.apps);
+    if (
+      value.version !== 1 ||
+      value.scope !== 'shared' ||
+      credential.kind !== 'pat' ||
+      typeof credential.token !== 'string' ||
+      typeof credential.createdAt !== 'string'
+    ) {
+      return undefined;
+    }
+    const token = validateToken(credential.token);
+    const apps: SharedCredentialEnvelope['apps'] = {};
+    for (const [appId, rawRegistration] of Object.entries(rawApps)) {
+      const registration = asRecord(rawRegistration);
+      if (typeof registration.connectedAt !== 'string') return undefined;
+      if (
+        registration.repositoryHint !== undefined &&
+        typeof registration.repositoryHint !== 'string'
+      ) {
+        return undefined;
+      }
+      apps[appId] = {
+        connectedAt: registration.connectedAt,
+        ...(typeof registration.repositoryHint === 'string'
+          ? { repositoryHint: registration.repositoryHint }
+          : {}),
+      };
+    }
+    return {
+      version: 1,
+      scope: 'shared',
+      credential: {
+        kind: 'pat',
+        token,
+        createdAt: credential.createdAt,
+        ...(typeof credential.account === 'string' ? { account: credential.account } : {}),
+      },
+      apps,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function redactToken(value: string): string {
