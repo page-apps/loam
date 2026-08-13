@@ -381,9 +381,17 @@ export function loadSavedGitHubConnection(): SavedGitHubConnection | undefined {
   try {
     const config = validateGitHubGraphConfig(JSON.parse(rawConfig));
     if (safeStorageGet(localStorage, tokenSourceKey) === sharedTokenSource) {
+      const sharedToken = loadSharedGitHubCredential()?.token;
+      if (!sharedToken) {
+        // A removed Hub credential should not hide a separately saved Loam PAT.
+        const session = decodeTokenEnvelope(safeStorageGet(sessionStorage, sessionTokenKey));
+        if (session) return { config, token: session, persistent: false, shared: false };
+        const persistent = decodeTokenEnvelope(safeStorageGet(localStorage, persistentTokenKey));
+        return { config, token: persistent, persistent: Boolean(persistent), shared: false };
+      }
       return {
         config,
-        token: loadSharedGitHubCredential()?.token,
+        token: sharedToken,
         persistent: false,
         shared: true,
       };

@@ -160,6 +160,8 @@ test('explicitly uses the hub PAT without duplicating or deleting it', async ({ 
   await dialog.getByRole('button', { name: 'Connect private graph' }).click();
 
   await expect(page.getByText('Shared graph entry', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Shared graph entry', { exact: true })).toBeVisible();
   const storageAfterConnect = await page.evaluate(() => ({
     persistent: localStorage.getItem('loam:github-graph:token:persistent:v1'),
     session: sessionStorage.getItem('loam:github-graph:token:session:v1'),

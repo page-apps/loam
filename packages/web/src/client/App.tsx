@@ -685,8 +685,10 @@ export function App() {
   );
 
   useEffect(() => {
-    const restoredToken = savedGitHub?.token;
-    if (!savedGitHub || !restoredToken) return;
+    const sharedCredential = savedGitHub?.config ? loadSharedGitHubCredential() : undefined;
+    const restoredToken = savedGitHub?.token ?? sharedCredential?.token;
+    const restoringShared = Boolean(restoredToken && (!savedGitHub?.token || savedGitHub.shared));
+    if (!savedGitHub?.config || !restoredToken) return;
     let cancelled = false;
     setIsLoading(true);
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Restore keeps cancellation, credential verification, graph loading, and user-facing recovery in one guarded async effect.
@@ -696,6 +698,11 @@ export function App() {
         await github.verifyAccess();
         if (!cancelled) {
           await activateStore(github, '{count} pages connected from your private GitHub graph.');
+          if (restoringShared) {
+            saveGitHubConnection(github.config, restoredToken, false, true);
+            setUsingSharedToken(true);
+            setGitHubCredentialStored(true);
+          }
         }
       } catch (error) {
         if (!cancelled) {

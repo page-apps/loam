@@ -26,7 +26,7 @@ Loam exposes one `GraphStore` capability to application code and supplies two im
 
 ### Private GitHub store
 
-- Uses a fine-grained PAT entered at runtime or explicitly selected from the Page Apps shared browser vault.
+- Uses a fine-grained PAT entered at runtime or selected from the Page Apps shared browser vault.
 - Targets one owner, repository, and branch selected by the user.
 - Requires only repository **Contents: read and write**.
 - Reads the Git tree, fetches Markdown blobs, and indexes them in the browser.
@@ -40,7 +40,7 @@ The connection boundary resolves a credential only after the user submits the re
 
 - Session storage is the default.
 - Persistent storage is an explicit trusted-device opt-in and requires acknowledgement of the displayed security disclosure.
-- A shared Page Apps PAT is never selected automatically. Loam displays its availability, requires an explicit **Use shared PAT** action, and independently verifies write access to the chosen graph.
+- A shared Page Apps PAT requires a clear first-use choice, then may be selected automatically on later loads. Loam independently verifies write access to the chosen graph each time and keeps a manual disconnect path.
 - Shared mode records only a source marker and graph configuration in Loam storage. It does not duplicate the token from the framework-owned `repo-apps:credentials:v1` vault.
 - The connection target may persist without the token so reconnecting is easier.
 - Disconnect removes Loam's source marker, session and persistent credentials, and private-content cache. It never removes the shared vault; global removal belongs to Personal Hub.

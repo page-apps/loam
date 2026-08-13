@@ -32,7 +32,7 @@ The deployed app is client-only. Local-folder content is not uploaded. GitHub-mo
 ### Web package
 
 - `logseq.ts` defines the `GraphStore` boundary and adapts writable browser folders.
-- `github-graph.ts` encapsulates runtime PAT credentials, explicit shared-vault selection, Git tree/blob reads, revision-aware file writes, connection storage, token redaction, and the private blob cache.
+- `github-graph.ts` encapsulates runtime PAT credentials, first-use shared-vault selection and later restoration, Git tree/blob reads, revision-aware file writes, connection storage, token redaction, and the private blob cache.
 - `OutlinerEditor.tsx` owns keyboard, touch, visual-viewport, focus, and undo behavior.
 - `App.tsx` coordinates connection, journals, autosave, page creation, quick capture, search, references, and backlinks without reading a raw GitHub token.
 
@@ -46,7 +46,7 @@ The deployed app is client-only. Local-folder content is not uploaded. GitHub-mo
 
 ### Private-GitHub data flow
 
-1. The user enters a repository target and either a fine-grained PAT or explicitly selects the shared Page Apps PAT.
+1. The user enters a repository target and either a fine-grained PAT or selects the shared Page Apps PAT.
 2. The store verifies write access without exposing the token to UI code.
 3. A recursive Git tree identifies Markdown blobs.
 4. Unchanged blobs are read from IndexedDB by Git SHA; missing blobs come from GitHub.
