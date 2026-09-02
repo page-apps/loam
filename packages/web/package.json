@@ -30,7 +30,7 @@
   "dependencies": {
     "@loam/core": "workspace:*",
     "express": "^5.2.1",
-    "preact": "^10.29.2"
+    "preact": "^10.29.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
